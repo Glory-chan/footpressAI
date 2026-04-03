@@ -21,13 +21,12 @@ async def upload_file(filename: str, data: bytes, content_type: str = "applicati
         return {"success": False, "error": str(e)}
 
 
-async def list_files(prefix: str = None) -> list:
-    """Liste les fichiers dans le container, filtrés par préfixe utilisateur si fourni."""
+async def list_files() -> list:
+    """Liste tous les fichiers dans le container."""
     try:
-        blobs = _container.list_blobs(name_starts_with=prefix)
         return [
             {"name": b.name, "size": b.size, "last_modified": str(b.last_modified)}
-            for b in blobs
+            for b in _container.list_blobs()
         ]
     except AzureError as e:
         return [{"error": str(e)}]
