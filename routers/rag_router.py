@@ -57,20 +57,21 @@ async def upload_document(
 @router.post("/query")
 async def query_archives(
     question: str = Form(...),
-    source: Optional[str] = Form(None)
+    source: Optional[str] = Form(None),
+    user_id: str = Depends(optional_api_key)
 ):
     """
     Interroge les archives du journaliste avec recherche vectorielle.
-    Répond UNIQUEMENT à partir des documents uploadés (pas d'hallucination).
-
-    Exemples :
-    - "Comment Mbappé a performé dans les derbies ?"
-    - "Quels sont les stats de possession du PSG cette saison ?"
+    Répond UNIQUEMENT à partir des documents de l'utilisateur connecté.
     """
     if not question.strip():
         raise HTTPException(status_code=400, detail="La question ne peut pas être vide.")
 
-    result = await rag_service.query_rag(question, source_filter=source)
+    # Filtre automatique par utilisateur : journaliste1/...
+    user_prefix = f"{user_id}/" if user_id != "anonymous" else None
+    effective_source = source or user_prefix
+
+    result = await rag_service.query_rag(question, source_filter=effective_source)
 
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
@@ -124,15 +125,17 @@ async def evaluate_rag(
 
 
 @router.get("/files")
-async def list_files():
-    """Liste tous les fichiers uploadés dans le Blob Storage."""
-    return {"files": await blob_service.list_files()}
+async def list_files(user_id: str = Depends(optional_api_key)):
+    """Liste uniquement les fichiers de l'utilisateur connecté."""
+    prefix = f"{user_id}/" if user_id != "anonymous" else None
+    return {"files": await blob_service.list_files(prefix=prefix)}
 
 
 @router.delete("/files/{filename}")
-async def delete_file(filename: str):
-    """Supprime un fichier du Blob Storage."""
-    result = await blob_service.delete_file(filename)
+async def delete_file(filename: str, user_id: str = Depends(optional_api_key)):
+    """Supprime un fichier du Blob Storage (uniquement les fichiers de l'utilisateur)."""
+    scoped_filename = f"{user_id}/{filename}" if user_id != "anonymous" else filename
+    result = await blob_service.delete_file(scoped_filename)
     if not result.get("success"):
         raise HTTPException(status_code=404, detail=result.get("error"))
     return result
